@@ -1,0 +1,35 @@
+#nexus
+begin data;
+dimensions ntax=28 nchar=1;
+format missing=? gap=- datatype=standard symbols="0123456789ABCDEFGHIJKLMNO";
+matrix
+1 (4 9 E J O)
+2 (1 6 B G L)
+3 (1 6 B G L)
+4 (4 9 E J O)
+5 (0 5 A F K)
+6 (4 9 E J O)
+7 (4 9 E J O)
+8 (4 9 E J O)
+9 (4 9 E J O)
+10 (3 8 D I N)
+11 (3 8 D I N)
+12 (0 5 A F K)
+13 (4 9 E J O)
+14 (4 9 E J O)
+15 (4 9 E J O)
+16 (4 9 E J O)
+17 (4 9 E J O)
+18 (4 9 E J O)
+19 (4 9 E J O)
+20 (4 9 E J O)
+21 (4 9 E J O)
+22 (4 9 E J O)
+23 (4 9 E J O)
+24 (4 9 E J O)
+25 (4 9 E J O)
+26 (2 7 C H M)
+27 (4 9 E J O)
+28 (4 9 E J O)
+;
+end;

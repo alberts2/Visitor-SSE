@@ -1,0 +1,25 @@
+#nexus
+begin data;
+dimensions ntax=18 nchar=1;
+format missing=? gap=- datatype=standard symbols="0123456789ABCDEFGHIJKLMNO";
+matrix
+1 (2 7 C H M)
+2 (2 7 C H M)
+3 (2 7 C H M)
+4 (0 5 A F K)
+5 (2 7 C H M)
+6 (2 7 C H M)
+7 (2 7 C H M)
+8 (2 7 C H M)
+9 (2 7 C H M)
+10 (2 7 C H M)
+11 (1 6 B G L)
+12 (2 7 C H M)
+13 (2 7 C H M)
+14 (2 7 C H M)
+15 (2 7 C H M)
+16 (2 7 C H M)
+17 (2 7 C H M)
+18 (2 7 C H M)
+;
+end;

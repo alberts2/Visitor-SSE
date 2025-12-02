@@ -1,0 +1,38 @@
+#!/usr/bin/rb
+
+if (!exists("phy_fn"))     phy_fn = "./data/emp/nadeau_full.location_tree.tre"
+#if (!exists("stoch_fn")) stoch_fn = "./output/logs/full/clado_migration/out._fullclado.seed_5.stoch.txt"
+#if (!exists("out_fn"))     out_fn = "./output/logs/full/clado_migration/out._fullclado.seed_5.stoch_summ.tsv"
+#
+#if (!exists("stoch_fn")) stoch_fn = "./output/logs/full/visitor/out._full.seed_5.stoch.txt"
+#if (!exists("out_fn"))     out_fn = "./output/logs/full/visitor/out._full.seed_5.stoch_summ.tsv"
+#
+#if (!exists("stoch_fn")) stoch_fn = "./output/logs/full/visitor_equal_rates_new_priors/out._full.seed_5.stoch.txt"
+#if (!exists("out_fn"))     out_fn = "./output/logs/full/visitor_equal_rates_new_priors/out._full.seed_5.stoch_summ.tsv"
+#
+#if (!exists("stoch_fn")) stoch_fn = "./output/logs/full/clado_migration_equal_rates_new_priors/out._fullclado.seed_5.stoch.txt"
+#if (!exists("out_fn"))     out_fn = "./output/logs/full/clado_migration_equal_rates_new_priors/out._fullclado.seed_5.stoch_summ.tsv"
+#
+#if (!exists("stoch_fn")) stoch_fn = "./output/logs/full/visitor_unequal_rates_fixed_sampling/out._full.seed_5.stoch.txt"
+#if (!exists("out_fn"))     out_fn = "./output/logs/full/visitor_unequal_rates_fixed_sampling/out._full.seed_5.stoch_summ.tsv"
+#
+if (!exists("stoch_fn")) stoch_fn = "./output/logs/full/visitor_unequal_new_priors_burnin/out._full.seed_5.stoch.txt"
+if (!exists("out_fn"))     out_fn = "./output/logs/full/visitor_unequal_new_priors_burnin/out._full.seed_5.stoch_summ.tsv"
+
+
+# the tree to summarize results over
+tree = readTrees(phy_fn)[1]
+
+
+# read in character map trace files
+anc_state_trace = readAncestralStateTrace(stoch_fn) 
+
+# create a file that summarizes the sampled stochastically mapped transitions
+summarizeCharacterMaps(tree=tree,
+                       character_map_trace_vector=anc_state_trace,
+                       file=out_fn,
+                       burnin=0.25,
+                       separator="\t",
+                       use_simmap_default=false)
+
+quit()

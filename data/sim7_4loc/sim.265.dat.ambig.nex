@@ -1,0 +1,33 @@
+#nexus
+begin data;
+dimensions ntax=26 nchar=1;
+format missing=? gap=- datatype=standard symbols="0123456789ABCDEF";
+matrix
+1 (2 6 A E)
+2 (3 7 B F)
+3 (3 7 B F)
+4 (3 7 B F)
+5 (0 4 8 C)
+6 (1 5 9 D)
+7 (1 5 9 D)
+8 (1 5 9 D)
+9 (1 5 9 D)
+10 (1 5 9 D)
+11 (1 5 9 D)
+12 (2 6 A E)
+13 (0 4 8 C)
+14 (1 5 9 D)
+15 (1 5 9 D)
+16 (1 5 9 D)
+17 (1 5 9 D)
+18 (1 5 9 D)
+19 (1 5 9 D)
+20 (1 5 9 D)
+21 (1 5 9 D)
+22 (1 5 9 D)
+23 (1 5 9 D)
+24 (1 5 9 D)
+25 (1 5 9 D)
+26 (3 7 B F)
+;
+end;

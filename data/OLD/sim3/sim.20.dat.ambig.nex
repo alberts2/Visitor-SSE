@@ -1,0 +1,15 @@
+#nexus
+begin data;
+dimensions ntax=8 nchar=1;
+format missing=? gap=- datatype=standard symbols="0123456789ABCDEFGHIJKLMNO";
+matrix
+1 (4 9 E J O)
+2 (4 9 E J O)
+3 (4 9 E J O)
+4 (4 9 E J O)
+5 (4 9 E J O)
+6 (4 9 E J O)
+7 (4 9 E J O)
+8 (4 9 E J O)
+;
+end;

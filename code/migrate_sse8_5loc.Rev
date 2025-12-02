@@ -1,0 +1,425 @@
+# Phylogenetic visitor-SIR/SSE model
+
+start_time = time("seconds")
+
+if (!exists("update_recovery_rate")) update_recovery_rate = false
+#if (!exists("use_init")) use_init = true
+if (!exists("seed")) seed = 5
+if (!exists("idx")) idx = 5
+if (!exists("job_dir")) job_dir = "sim8_5loc"
+
+if (!exists("fix_R0"))        fix_R0       = false
+if (!exists("fix_clado"))     fix_clado    = false
+if (!exists("fix_delta"))     fix_delta    = false
+if (!exists("fix_ma"))        fix_ma       = false
+if (!exists("fix_mc"))        fix_mc       = false
+
+print(idx)
+
+#tensorphylo_fp = "/mnt/c/Users/ammon_work/Desktop/phylogenetics_software/tensorphylo/build/installer/lib"
+#tensorphylo_fp = "/home/athompson/software/tensorphylo/build/installer/lib"
+#tensorphylo_fp = "/Users/mlandis/.local/lib/tensorphylo"
+#tensorphylo_fp = "/home/mlandis/.local/lib/tensorphylo"
+#tensorphylo_fp = "/Users/albertsoewongsono/Software/tensorphylo/build/installer/lib"
+
+#loadPlugin("TensorPhylo", tensorphylo_fp)
+loadPlugin("TensorPhylo", "/tensorphylo/build/installer/lib")
+
+
+## Analysis settings
+print_debug = !false
+num_gen = 7500
+mv_weight = 5
+print_gen = 1
+f_burn = 0.1
+thin = 10
+symmetric=true
+move_schedule = v("random","single")[1]
+
+## Model settings
+ma_model = 1
+mc_model = 1
+
+
+## Filesystem
+data_dir = "data/" + job_dir + "/"
+out_dir  = "output/logs3/"
+base_fn  = data_dir + "sim." + idx
+phy_fn   = base_fn + ".tre"
+data_fn  = base_fn + ".dat.unambig.nex"
+label_fn = base_fn + ".labels.csv"
+out_fn   = out_dir + "out.idx_" + idx + ".seed_" + seed
+
+## Read input
+print(phy_fn)
+tree    = readTrees(phy_fn)[1]
+taxa    = tree.taxa()
+num_taxa = taxa.size()
+data    = readDiscreteCharacterData(data_fn)
+
+# build compound state space
+num_states = data.getStateDescriptions().size()
+num_loc = num_states
+
+## Set parameters
+label_names = readDataDelimitedFile(file=label_fn, header=false, separator=",")[1]
+label_values = readDataDelimitedFile(file=label_fn, header=true, separator=",")[1]
+
+num_labels = label_names.size()
+num_true_count = 0
+S_0_idx = 1
+for (i in 1:num_labels) {
+    # log recovery rate, gamma
+    if (label_names[i].find("log_Recover") > 0) {
+    # if (label_names[i].find("Recover") > 0) {
+        # assumes log_Recover is natural log
+        recovery_rate = exp(label_values[i])
+        # recovery_rate = (label_values[i])
+    }
+    # sample count, used for sampling proportions
+    if (label_names[i].find("SampleCount_") > 0) {
+        num_true_count += label_values[i]
+    }
+    # susceptible population sizes
+    if (label_names[i].find("Total_S0_") > 0) {
+        S_0[S_0_idx++] = label_values[i]
+    }
+    # R0
+    if (label_names[i].find("log_R0") > 0) {
+        # convert to linear scale
+        R0_true = exp(label_values[i])
+    }
+    # delta
+    if (label_names[i].find("log_Sample") > 0) {
+        # keep on log scale
+        delta_true = label_values[i]
+    }
+    # visit-depart
+    if (label_names[i].find("log_MigrateAna") > 0) {
+        # keep on log scale
+        ma_true = label_values[i]
+    }
+    # visit-return
+    if (label_names[i].find("log_MigrateClado") > 0) {
+        # keep on log scale
+        mc_true = label_values[i]
+    }
+
+}
+
+
+####################
+# MODEL PARAMETERS #
+####################
+
+subsampling_p <- num_taxa / num_true_count
+
+age <- tree.rootAge() + tree.branchLength(tree.nnodes())
+#age <- tree.rootAge()
+
+# gamma, recovery rate
+gamma_param ~ dnUniform(0.1, 1)  ## Change prior if this param is estimated!
+gamma := rep(gamma_param, num_states)
+if (!update_recovery_rate) {
+    gamma_param.setValue(recovery_rate)
+}
+
+# delta, sampling rate
+delta_param ~ dnUniform(ln(10^-2), ln(10^-1))
+delta := rep(exp(delta_param), num_states)
+subsample_delta := delta * subsampling_p
+
+# beta_M is the beta param in MASTER which = beta/N. 
+# Note in dI/dt = beta/N * S * I - gamma * I
+# beta/N = beta_M
+# R_0 = beta_M * S_0 / gamma = beta/N * S_0 / gamma = beta_M * S_0 / mu
+# therefore lambda = beta_M * S_0 = mu * R_0
+# if destructive sampling, lambda = (delta + mu) * R_0
+
+R_0_param_i  ~ dnUniform(4,12)
+clado_no_change_prob ~ dnUniform(0,1)
+#R_0 := rep(R_0_param, num_states)
+for (i in 1:num_states) {
+    for (j in 1:num_states) {
+        if (i == j) {
+            lambda[i][j] := (delta[i] + gamma[i]) * abs(R_0_param_i * clado_no_change_prob)
+        } else {
+            lambda[i][j] := 0
+        }
+        beta_MASTER[i][j] := lambda[i][j] / S_0[j]
+    }
+}
+
+# mass sampling event parameters
+rho <- 0.05 * subsampling_p
+
+# MA: Migrate-Anagenetic model
+# assume matrix D_ij for migrating from location i into location j
+# M1: all-equal: all rates equal
+# M2: row-equal: all rates from location i are equal
+# M3: col-equal: all rates into location j are equal
+# M4: none-equal: all rates differ
+
+# prior on log-rate
+# exp(-8) = 0.0003354626
+# exp(-5) = 0.006737947
+ma_base_dist = dnUniform( ln(2*0.1/4), ln(2*1.0/4) )
+if (ma_model == 1) {
+    # all-equal
+    ma_base_rate ~ ma_base_dist
+    for (i in 1:num_loc) {
+        for (j in 1:num_loc) {
+            ma_rate[i][j] := ma_base_rate
+        }
+    }
+} else if (ma_model == 2) {
+    # row-equal
+    for (i in 1:num_loc) {
+        ma_base_rate[i] ~ ma_base_dist
+        for (j in 1:num_loc) {
+            ma_rate[i][j] := ma_base_rate[i]
+        }
+    }
+} else if (ma_model == 3) {
+    # col-equal
+    for (j in 1:num_loc) {
+        ma_base_rate[j] ~ ma_base_dist
+        for (i in 1:num_loc) {
+            ma_rate[i][j] := ma_base_rate[j]
+        }
+    }
+} else if (ma_model == 4) {
+    # none-equal
+    for (i in 1:num_loc) {
+        for (j in 1:num_loc) {
+            ma_base_rate[i][j] ~ ma_base_dist
+            ma_rate[i][j] := ma_base_rate[i][j]
+        }
+    }
+}
+
+# 
+# # MA: Migrate-Cladogenetic model
+# # assume matrix D_ij for migrating+cladogenesis from location i into location j
+# # lambda_iij := D_ij
+# # M1: all-equal: all rates equal
+# # M2: row-equal: all rates from location i are equal
+# # M3: col-equal: all rates into location j are equal
+# # M4: none-equal: all rates differ
+# 
+# # prior on log-rate
+# # exp(-8) = 0.0003354626
+# # exp(-5) = 0.006737947
+# mc_base_dist = dnUniform( ln(0.1), ln(1.0) )
+# if (mc_model == 1) {
+#     # all-equal
+#     mc_base_rate ~ mc_base_dist
+#     for (i in 1:num_loc) {
+#         for (j in 1:num_loc) {
+#             mc_rate[i][j] := mc_base_rate
+#         }
+#     }
+# } else if (mc_model == 2) {
+#     # row-equal
+#     for (i in 1:num_loc) {
+#         mc_base_rate[i] ~ mc_base_dist
+#         for (j in 1:num_loc) {
+#             mc_rate[i][j] := mc_base_rate[i]
+#         }
+#     }
+# } else if (mc_model == 3) {
+#     # col-equal
+#     for (j in 1:num_loc) {
+#         mc_base_rate[j] ~ mc_base_dist
+#         for (i in 1:num_loc) {
+#             mc_rate[i][j] := mc_base_rate[j]
+#         }
+#     }
+# } else if (mc_model == 4) {
+#     # none-equal
+#     for (i in 1:num_loc) {
+#         for (j in 1:num_loc) {
+#             mc_base_rate[i][j] ~ mc_base_dist
+#             mc_rate[i][j] := mc_base_rate[i][j]
+#         }
+#     }
+# }
+# 
+# build visitor movement matrix, M
+# needs no rate corrections
+for (i in 1:num_states) {
+    for (j in 1:num_states) {
+        if (i == j) {
+            # zero diagonal
+            M[i][j] <- 0.0
+        } else {
+            # return event
+            M[i][j] := exp(ma_rate[i][j])
+        }
+    }
+}
+eta := fnFreeK(M, rescaled = FALSE)
+
+
+# cladogenetic matrix
+# lambda_iij : i -> i,j
+# i == j : then no migration
+# i != j : then yes migration
+
+clado_idx = 1
+for (i in 1:num_loc) {
+    for (j in 1:num_loc) {
+        s_old = i - 1
+        s_new = j - 1
+        if (s_old != s_new) {
+            # divide by 2 for left-right
+            clado_rates[clado_idx] := lambda[i][j] / 2.0
+            clado_events[clado_idx++] = [ s_old, s_old, s_new ]
+            clado_rates[clado_idx] := lambda[i][j] / 2.0
+            clado_events[clado_idx++] = [ s_old, s_new, s_old ]
+        } else {
+            clado_rates[clado_idx] := lambda[i][j]
+            clado_events[clado_idx++] = [ s_old, s_old, s_old ]
+        }
+    }
+}
+
+
+if (print_debug) {
+    print("Recovery rate: " + recovery_rate)
+    print("Subsampling proportion: " + subsampling_p)
+    print("Process age: " + age)
+    
+    print("Migration rates")
+    if (ma_model == 1) print("M1: all-equal: all migration rates equal")
+    if (ma_model == 2) print("M2: row-equal: all migration rates from home-location i are equal")
+    if (ma_model == 3) print("M3: col-equal: all migration rates into away-location j are equal")
+    if (ma_model == 4) print("M4: none-equal: all migration rates differ")
+    #for (i in 1:num_loc) {
+    # 	print(ma_rate[i])
+    #}
+    
+    print ("Cladogenetic rates")
+    for (i in 1:clado_events.size()) { 
+        print(i + ":  " + clado_events[i] + "    rate = " + clado_rates[i])
+    }
+
+    print("Anagenetic rates")
+    for (i in 1:eta.size()) {
+        print(eta[i])
+    }
+
+    print("num_taxa = ", num_taxa)
+    print("age = ", age)
+}
+
+
+clado_map := fnCladogeneticSpeciationRateMatrix(clado_events, clado_rates, num_states)
+omega := clado_map.getCladogeneticProbabilityMatrix()
+sum_rates := clado_map.getSpeciationRateSumPerState()
+
+# root state frequencies
+for (i in 1:num_states) {
+    root_freq_u[i] := abs(S_0[i])
+}
+root_freq := simplex(root_freq_u)
+
+# condition for diversification model
+# condition <- "treeExtant"
+condition <- "survival"
+
+# tensorphylo bug when using originAge
+psi ~ dnGeneralizedLineageHeterogeneousBirthDeathProcess(
+        originAge    = age,
+        pi           = root_freq,
+        lambda       = sum_rates,
+        eta          = eta,
+        mu           = gamma,
+        omega        = omega,
+        delta        = subsample_delta,
+        rho          = rho,
+        condition    = condition,
+        taxa         = taxa,
+        nStates      = num_states,
+        zeroIndex    = TRUE,
+        nProc        = 10
+)
+
+## Initialize parameters
+# if (fix_delta) {
+#     delta_param.setValue(delta_true)
+# }
+# if (fix_R0) {
+#     R_0_param.setValue(R0_true)
+# }
+# if (fix_ma) {
+#     ma_base_rate.setValue(vd_true)
+# }
+
+
+print("no clamp", psi.lnProbability())
+psi.clamp(tree)
+print("after clamp tree", psi.lnProbability())
+psi.clampCharData(data)
+print("after clamp data", psi.lnProbability())
+
+
+
+## Define moves
+moves = VectorMoves()
+
+if (!fix_R0) {
+    moves.append(mvScale(R_0_param_i, weight = mv_weight, tune=true))
+}
+if (!fix_clado){
+    moves.append(mvScale(clado_no_change_prob, weight = mv_weight, tune=true))
+}
+if (!fix_delta) {
+    moves.append(mvScale(delta_param, weight = mv_weight, tune=true))
+}
+
+# gamma, recovery rate
+if (update_recovery_rate) {
+    moves.append(mvSlide(gamma_param, weight=mv_weight, tune=true))
+}
+
+# vr, visit-return rate
+if (!fix_ma) {
+    if (ma_model == 1) {
+        moves.append(mvScale(ma_base_rate, weight=mv_weight, tune=true))
+    } else if (ma_model == 2 || ma_model == 3) {
+        for (i in 1:num_loc) {
+            moves.append(mvScale(ma_base_rate[i], weight=mv_weight, tune=true))
+        }
+    } else if (ma_model == 4) {
+        for (i in 1:num_loc) {
+            for (j in 1:num_loc) {
+                moves.append(mvScale(ma_base_rate[i][j], weight=mv_weight, tune=true))
+            }
+        }
+    }
+}
+
+
+## Define monitors
+monitors = VectorMonitors()
+monitors.append(mnScreen(printgen=print_gen))
+monitors.append(mnModel(printgen=print_gen * thin, filename=out_fn + ".model.log"))
+monitors.append(mnFile(R_0_param_i,clado_no_change_prob, delta, ma_rate, printgen=print_gen * thin, filename=out_fn + ".model.json", format="json"))
+#monitors.append(mnJointConditionalAncestralState(tree, psi, filename = out_fn + ".ancStates", 
+#        type = "Standard", printgen = 20 * thin, withStartStates = true)) 
+
+## Define model
+my_model = model(psi)
+
+# analysis
+my_mcmc = mcmc(my_model, monitors, moves, moveschedule=move_schedule)
+#if (f_burn > 0) {
+#    my_mcmc.burnin(num_gen * f_burn, 100)
+#}
+my_mcmc.run(num_gen)
+
+print("run time (min): " + (time("seconds") - start_time)/60)
+q()
+
+

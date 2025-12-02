@@ -1,0 +1,11 @@
+name,status,color
+"Hubei","resident","#92C5DE"
+"Hubei","visitor","#3B88C0"
+"France","resident","#F4A582"
+"France","visitor","#D04A3A"
+"Germany","resident","#A6DBA0"
+"Germany","visitor","#3C9850"
+"Italy","resident","#C2A5CF"
+"Italy","visitor","#9352A6"
+"OtherEU","resident","#D9D9AA"
+"OtherEU","visitor","#A87732"

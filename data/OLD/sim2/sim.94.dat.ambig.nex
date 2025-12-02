@@ -1,0 +1,8 @@
+#nexus
+begin data;
+dimensions ntax=1 nchar=1;
+format missing=? gap=- datatype=standard symbols="0123456789ABCDEFGHIJKLMNO";
+matrix
+1 (4 9 E J O)
+;
+end;

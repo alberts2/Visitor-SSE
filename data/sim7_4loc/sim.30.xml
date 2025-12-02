@@ -1,0 +1,340 @@
+<beast version='2.0' namespace='master:master.model:master.steppers:master.conditions:master.postprocessors:master.outputs'>
+
+
+<run spec='InheritanceEnsemble'
+    verbosity='1'
+    nTraj='1'
+    nSamples='1000'
+    samplePopulationSizes='true'
+    simulationTime='3.9990231831901175'
+    maxConditionRejects='1'>
+
+<model spec='Model'>
+
+<populationType spec='PopulationType' typeName='Susceptible' id='Susceptible' dim='4 4 1'/>
+<populationType spec='PopulationType' typeName='Contagious' id='Contagious' dim='4 4 1'/>
+<populationType spec='PopulationType' typeName='Recovered' id='Recovered' dim='4 4 1'/>
+<populationType spec='PopulationType' typeName='Sampled' id='Sampled' dim='4 1'/>
+<populationType spec='PopulationType' typeName='X' id='X' dim='1'/>
+<populationType spec='PopulationType' typeName='SampleScale' id='SampleScale' dim='4 1'/>
+<populationType spec='PopulationType' typeName='RecoverScale' id='RecoverScale' dim='4 1'/>
+<populationType spec='PopulationType' typeName='InfectScale' id='InfectScale' dim='4 4 1'/>
+<populationType spec='PopulationType' typeName='R2SScale' id='R2SScale' dim='4 1'/>
+<populationType spec='PopulationType' typeName='VisitDepartScale' id='VisitDepartScale' dim='4 4 1'/>
+<populationType spec='PopulationType' typeName='VisitReturnScale' id='VisitReturnScale' dim='4 4 1'/>
+<populationType spec='PopulationType' typeName='SampleCount' id='SampleCount' dim='4'/>
+
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='Visit_Return'>
+	<reaction spec='Reaction' reactionName='r_VR' rate='0.001'>
+		Contagious[h,j,u]:1 + VisitReturnScale[h,j,u]:2 -> Contagious[h,h,u]:1 + VisitReturnScale[h,j,u]:2
+			<predicate spec='Predicate' value='h != j'/>
+	</reaction>
+</reactionGroup>
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='Infect_S_to_I'>
+	<reaction spec='Reaction' reactionName='r_S_I' rate='0.001'>
+		Susceptible[h,h,u] + Contagious[i,j,u]:1 + InfectScale[h,j,u]:2 -> Contagious[h,j,u]:1 + Contagious[i,j,u]:1 + InfectScale[h,j,u]:2
+	</reaction>
+</reactionGroup>
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='Infect_I_to_R'>
+	<reaction spec='Reaction' reactionName='r_I_R' rate='0.001'>
+		Contagious[h,j,u] + RecoverScale[j,u] -> Recovered[h,h,u] + RecoverScale[j,u]
+	</reaction>
+</reactionGroup>
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='Wane_R_to_S'>
+	<reaction spec='Reaction' reactionName='r_R_S' rate='0.001'>
+		Recovered[h,h,u] + R2SScale[h,u] -> Susceptible[h,h,u] + R2SScale[h,u]
+	</reaction>
+</reactionGroup>
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='Visit_Depart'>
+	<reaction spec='Reaction' reactionName='r_VD' rate='0.001'>
+		Contagious[h,h,u]:1 + VisitDepartScale[h,j,u]:2 -> Contagious[h,j,u]:1 + VisitDepartScale[h,j,u]:2
+			<predicate spec='Predicate' value='h != j'/>
+	</reaction>
+</reactionGroup>
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='TipSample'>
+	<reaction spec='Reaction' reactionName='r_tip_sample' rate='1000000000000000.0:0,0:3.9990231830901175'>
+		Sampled[j,u]:1 -> X
+	</reaction>
+</reactionGroup>
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='Sample_I_to_A_extant'>
+	<reaction spec='Reaction' reactionName='r_I_A_extant' rate='0:0,500000.00000000006:3.9990230831901177,0:3.9990231831901175'>
+		Contagious[h,j,u]:1 -> Sampled[j,u]:1 + Recovered[h,h,u]:2 + SampleCount[j]
+	</reaction>
+</reactionGroup>
+
+<reactionGroup spec='ReactionGroup' reactionGroupName='Sample_I_to_A'>
+	<reaction spec='Reaction' reactionName='r_I_A' rate='0.001:0,0:3.9990231830901175'>
+		Contagious[h,j,u]:1 + SampleScale[j,u]:2 -> Sampled[j,u]:1 + Recovered[h,h,u]:2 + SampleScale[j,u]:2 + SampleCount[j]
+	</reaction>
+</reactionGroup>
+
+
+
+</model>
+
+
+<initialState spec='InitState'>
+	<!-- START STATE -->
+	<lineageSeedMultiple spec='MultipleIndividuals' copies='1'>
+		<population spec ='Population' type='@Contagious' location='0 0 0'/>
+	</lineageSeedMultiple>
+
+	<!-- COMPARTMENT SIZES -->
+	<populationSize spec='PopulationSize' size='100000000'>
+		<population spec='Population' type='@Susceptible' location='0 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='0 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='0 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='0 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='1 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='100000000'>
+		<population spec='Population' type='@Susceptible' location='1 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='1 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='1 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='2 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='2 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='100000000'>
+		<population spec='Population' type='@Susceptible' location='2 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='2 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='3 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='3 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0'>
+		<population spec='Population' type='@Susceptible' location='3 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='100000000'>
+		<population spec='Population' type='@Susceptible' location='3 3 0'/>
+	</populationSize>
+
+	<!-- RATE SCALERS -->
+	<populationSize spec='PopulationSize' size='60.63155128661557'>
+		<population spec='Population' type='@SampleScale' location='0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='60.63155128661557'>
+		<population spec='Population' type='@SampleScale' location='1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='60.63155128661557'>
+		<population spec='Population' type='@SampleScale' location='2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='60.63155128661557'>
+		<population spec='Population' type='@SampleScale' location='3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='1.1496576135660258e-05'>
+		<population spec='Population' type='@InfectScale' location='0 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='0 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='0 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='0 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='1 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='1.1496576135660258e-05'>
+		<population spec='Population' type='@InfectScale' location='1 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='1 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='1 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='2 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='2 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='1.1496576135660258e-05'>
+		<population spec='Population' type='@InfectScale' location='2 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='2 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='3 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='3 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='2.2726337445068968e-06'>
+		<population spec='Population' type='@InfectScale' location='3 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='1.1496576135660258e-05'>
+		<population spec='Population' type='@InfectScale' location='3 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='250.50101051890272'>
+		<population spec='Population' type='@RecoverScale' location='0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='250.50101051890272'>
+		<population spec='Population' type='@RecoverScale' location='1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='250.50101051890272'>
+		<population spec='Population' type='@RecoverScale' location='2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='250.50101051890272'>
+		<population spec='Population' type='@RecoverScale' location='3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0.0'>
+		<population spec='Population' type='@R2SScale' location='0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0.0'>
+		<population spec='Population' type='@R2SScale' location='1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0.0'>
+		<population spec='Population' type='@R2SScale' location='2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='0.0'>
+		<population spec='Population' type='@R2SScale' location='3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='0 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='0 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='0 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='0 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='1 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='1 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='1 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='1 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='2 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='2 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='2 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='2 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='3 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='3 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='3 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='20.087619913201646'>
+		<population spec='Population' type='@VisitDepartScale' location='3 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='0 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='0 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='0 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='0 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='1 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='1 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='1 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='1 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='2 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='2 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='2 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='2 3 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='3 0 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='3 1 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='3 2 0'/>
+	</populationSize>
+	<populationSize spec='PopulationSize' size='101.61727655171977'>
+		<population spec='Population' type='@VisitReturnScale' location='3 3 0'/>
+	</populationSize>
+</initialState>
+
+
+<lineageEndCondition spec='CompositeLineageEndCondition' andMode='false'>
+	<lineageEndCondition spec='LineageEndCondition' nLineages='500000' alsoGreaterThan='true' isRejection='false'/>
+	<lineageEndCondition spec='LineageEndCondition' nLineages='0' alsoGreaterThan='false' isRejection='false'/>
+</lineageEndCondition>
+
+
+<inheritancePostProcessor spec='LineageFilter' populationName='Sampled' reverseTime='false' discard='false' leavesOnly='false' noClean='false'/>
+<inheritancePostProcessor spec='LineageSampler' nSamples='499'/>
+
+
+
+    <output spec='NewickOutput' collapseSingleChildNodes='true' fileName='./data/sim7_4loc/sim.30.tre'/>
+    <output spec='NexusOutput' fileName='./data/sim7_4loc/sim.30.nex.tre'/>
+    <output spec='JsonOutput' fileName='./data/sim7_4loc/sim.30.json' />
+                
+
+</run>
+</beast>

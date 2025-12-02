@@ -1,0 +1,18 @@
+tree = readTrees("../data/sim3/sim.2.tre")
+tree.methods()
+methods(tree)
+tree
+tree = readTrees("../data/sim3/sim.2.tre")
+tree.methods()
+tree.size()
+tree = readTrees("../data/sim3/sim.2.nex.tre")
+tree.size()
+tree
+tree = readTrees("../data/sim3/sim.7.nex.tre")
+tree
+tree.methods()
+tree = readTrees("../data/sim3/sim.7.nex.tre")
+?readTrees
+?readBranchLengthTrees
+tree.methods()
+q()

@@ -1,0 +1,5 @@
+readDataDelimitedFile("depart_rates.csv",TRUE,",",TRUE)
+md_matrix = readDataDelimitedFile("depart_rates.csv",TRUE,",",TRUE)
+md_matrix[1][1]
+md_matrix[1][2]
+quit()

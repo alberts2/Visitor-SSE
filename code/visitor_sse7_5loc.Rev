@@ -1,0 +1,514 @@
+# Phylogenetic visitor-SIR/SSE model
+
+start_time = time("seconds")
+
+if (!exists("update_recovery_rate")) update_recovery_rate = false
+#if (!exists("use_init")) use_init = true
+if (!exists("seed")) seed = 5
+if (!exists("idx")) idx = 5
+if (!exists("job_dir")) job_dir = "sim7_5loc"
+
+if (!exists("fix_R0"))     fix_R0       = false
+if (!exists("fix_delta"))  fix_delta    = false
+if (!exists("fix_vd"))     fix_vd       = false
+if (!exists("fix_vr"))     fix_vr       = false
+
+print(idx)
+
+#tensorphylo_fp = "/mnt/c/Users/ammon_work/Desktop/phylogenetics_software/tensorphylo/build/installer/lib"
+#tensorphylo_fp = "/home/athompson/software/tensorphylo/build/installer/lib"
+#tensorphylo_fp = "/Users/mlandis/.local/lib/tensorphylo"
+#tensorphylo_fp = "/home/mlandis/.local/lib/tensorphylo"
+#tensorphylo_fp = "/Users/albertsoewongsono/Software/tensorphylo/build/installer/lib"
+
+#loadPlugin("TensorPhylo", tensorphylo_fp)
+loadPlugin("TensorPhylo", "/tensorphylo/build/installer/lib")
+
+
+## Analysis settings
+print_debug = !false
+num_gen = 7500
+mv_weight = 5
+print_gen = 1
+f_burn = 0.1
+thin = 10
+symmetric=true
+move_schedule = v("random","single")[1]
+
+## Model settings
+vd_model = 1
+vr_model = 1
+
+
+## Filesystem
+data_dir = "data/" + job_dir + "/"
+out_dir  = "output/logs/"
+#data_fn  = data_dir + "location_tree_visitor.nex"
+base_fn  = data_dir + "sim." + idx
+phy_fn   = base_fn + ".tre"
+data_fn  = base_fn + ".dat.ambig.nex"
+label_fn = base_fn + ".labels.csv"
+out_fn   = out_dir + "out.idx_" + idx + ".seed_" + seed
+
+## Read input
+print(phy_fn)
+tree    = readTrees(phy_fn)[1]
+taxa    = tree.taxa()
+num_taxa = taxa.size()
+data    = readDiscreteCharacterData(data_fn)
+
+# build compound state space
+num_states = data.getStateDescriptions().size()
+num_loc = round(sqrt(num_states))
+home_loc = 1:num_loc
+away_loc = 1:num_loc
+idx = 1
+for (i in home_loc) {
+    for (j in away_loc) {
+        joint_loc_inv[i][j] = idx
+        joint_loc[idx++] = [ i, j ]
+    }
+}
+
+
+## Set parameters
+
+label_names = readDataDelimitedFile(file=label_fn, header=false, separator=",")[1]
+label_values = readDataDelimitedFile(file=label_fn, header=true, separator=",")[1]
+
+num_labels = label_names.size()
+num_true_count = 0
+S_0_idx = 1
+for (i in 1:num_labels) {
+    # log recovery rate, gamma
+    if (label_names[i].find("log_Recover") > 0) {
+    # if (label_names[i].find("Recover") > 0) {
+        # assumes log_Recover is natural log
+        recovery_rate = exp(label_values[i])
+        # recovery_rate = (label_values[i])
+    }
+    # sample count, used for sampling proportions
+    if (label_names[i].find("SampleCount_") > 0) {
+        num_true_count += label_values[i]
+    }
+    # susceptible population sizes
+    if (label_names[i].find("Total_S0_") > 0) {
+        S_0[S_0_idx++] = label_values[i]
+    }
+    # R0
+    if (label_names[i].find("log_R0") > 0) {
+        # convert to linear scale
+        R0_true = exp(label_values[i])
+    }
+    # delta
+    if (label_names[i].find("log_Sample") > 0) {
+        # keep on log scale
+        delta_true = label_values[i]
+    }
+    # visit-depart
+    if (label_names[i].find("log_VisitDepart") > 0) {
+        # keep on log scale
+        vd_true = label_values[i]
+    }
+    # visit-return
+    if (label_names[i].find("log_VisitReturn") > 0) {
+        # keep on log scale
+        vr_true = label_values[i]
+    }
+
+}
+
+
+####################
+# MODEL PARAMETERS #
+####################
+
+subsampling_p <- num_taxa / num_true_count
+
+age <- tree.rootAge() + tree.branchLength(tree.nnodes())
+#age <- tree.rootAge()
+
+# gamma, recovery rate
+gamma_param ~ dnUniform(0.1, 1)  ## Change prior if this param is estimated!
+gamma := rep(gamma_param, num_states)
+if (!update_recovery_rate) {
+    gamma_param.setValue(recovery_rate)
+}
+
+# delta, sampling rate
+delta_param ~ dnUniform(ln(10^-2), ln(10^-1))
+delta := rep(exp(delta_param), num_states)
+subsample_delta := delta * subsampling_p
+
+# beta_M is the beta param in MASTER which = beta/N. 
+# Note in dI/dt = beta/N * S * I - gamma * I
+# beta/N = beta_M
+# R_0 = beta_M * S_0 / gamma = beta/N * S_0 / gamma = beta_M * S_0 / mu
+# therefore lambda = beta_M * S_0 = mu * R_0
+# if destructive sampling, lambda = (delta + mu) * R_0
+
+R_0_param ~ dnUniform(4,12)
+R_0 := rep(R_0_param, num_states)
+lambda := (delta + gamma) * R_0
+for (i in 1:num_states) {
+    h = joint_loc[i][1]   # home location
+    # j = joint_loc[i][2]   # curr location
+    beta_MASTER[i] := lambda[i] / S_0[h]
+}
+
+# mass sampling event parameters
+rho <- 0.05 * subsampling_p
+
+# Depart model
+# assume matrix D_ij for departing from home-location i into away-location j
+# M1: all-equal: all depart rates equal
+# M2: row-equal: all depart rates from home-location i are equal
+# M3: col-equal: all depart rates into away-location j are equal
+# M4: none-equal: all depart rates differ
+
+# prior on log-rate
+# exp(-8) = 0.0003354626
+# exp(-5) = 0.006737947
+vd_base_dist = dnUniform( ln(2*0.01/4), ln(2*0.1/4) )
+if (vd_model == 1) {
+    # all-equal
+    vd_base_rate ~ vd_base_dist
+    for (i in 1:num_loc) {
+        for (j in 1:num_loc) {
+            vd_rate[i][j] := vd_base_rate
+        }
+    }
+} else if (vd_model == 2) {
+    # row-equal
+    for (i in 1:num_loc) {
+        vd_base_rate[i] ~ vd_base_dist
+        for (j in 1:num_loc) {
+            vd_rate[i][j] := vd_base_rate[i]
+        }
+    }
+} else if (vd_model == 3) {
+    # col-equal
+    for (j in 1:num_loc) {
+        vd_base_rate[j] ~ vd_base_dist
+        for (i in 1:num_loc) {
+            vd_rate[i][j] := vd_base_rate[j]
+        }
+    }
+} else if (vd_model == 4) {
+    # none-equal
+    for (i in 1:num_loc) {
+        for (j in 1:num_loc) {
+            vd_base_rate[i][j] ~ vd_base_dist
+            vd_rate[i][j] := vd_base_rate[i][j]
+        }
+    }
+}
+
+
+# Return model
+# assume matrix R_ij for returning from away-location i into home-location j
+# M1: all-equal: all return rates equal
+# M2: row-equal: all return rates from away-location i are equal
+# M3: col-equal: all return rates into home-location j are equal
+# M4: none-equal: all return rates differ
+
+# log rates
+# prior on log-rate
+# exp(-3) = 0.04978707
+# exp(0) = 1.0
+vr_base_dist = dnUniform( ln(2*0.1/4), ln(2*1.0/4) )
+if (vr_model == 1) {
+    # all-equal
+    vr_base_rate ~ vr_base_dist
+    for (i in 1:num_loc) {
+        for (j in 1:num_loc) {
+            vr_rate[i][j] := vr_base_rate
+        }
+    }
+} else if (vr_model == 2) {
+    # row-equal
+    for (i in 1:num_loc) {
+        vr_base_rate[i] ~ vr_base_dist
+        for (j in 1:num_loc) {
+            vr_rate[i][j] := vr_base_rate[i]
+        }
+    }
+} else if (vr_model == 3) {
+    # col-equal
+    for (j in 1:num_loc) {
+        vr_base_rate[j] ~ vr_base_dist
+        for (i in 1:num_loc) {
+            vr_rate[i][j] := vr_base_rate[j]
+        }
+    }
+} else if (vr_model == 4) {
+    # none-equal
+    for (i in 1:num_loc) {
+        for (j in 1:num_loc) {
+            vr_base_rate[i][j] ~ vr_base_dist
+            vr_rate[i][j] := vr_base_rate[i][j]
+        }
+    }
+}
+
+# build stationary frequency matrix, P
+for (m in 1:num_loc) {
+    # get the log-product of return rates per row
+    sum_log_vr_rate[m] := sum(vr_rate[m])
+    for (n in 1:num_loc) {
+        if (m == n) {
+            Pu[m][n] := exp(sum_log_vr_rate[m] - vr_rate[m][m])
+        } else {
+            Pu[m][n] := exp(vd_rate[m][n] + sum_log_vr_rate[m] - vr_rate[m][m] - vr_rate[n][m])
+        }
+    }
+}
+# normalized P with rows P_m = Pu_m / sum(Pu_m) and sum(P_m) == 1
+for (m in 1:num_loc) {
+    P[m] := Pu[m] / sum(Pu[m])
+}
+
+
+# build visitor movement matrix, M
+# needs no rate corrections
+for (i in 1:num_states) {
+    # from location, home and away
+    ih = joint_loc[i][1]
+    ia = joint_loc[i][2]
+    for (j in 1:num_states) {
+        # to location, home and away
+        jh = joint_loc[j][1]
+        ja = joint_loc[j][2]
+
+        if (i == j) {
+            # zero diagonal
+            M[i][j] <- 0.0
+        } else if (ih == jh && ih == ja) {
+            # return event
+            M[i][j] := exp(vr_rate[ih][ja])
+        } else if (ih == jh && ih == ia && ih != ja) {
+            # depart event
+            M[i][j] := exp(vd_rate[ih][ja])
+        } else {
+            # no other events allowed
+            M[i][j] <- 0.0
+        }
+    }
+}
+eta := fnFreeK(M, rescaled = FALSE)
+
+## possible events
+# anc     -> anc     + new
+# (ih,ia) -> (ih,ia) + (ih,ia)  YES
+# (jh,ia) -> (jh,ia) + (ih,ia)  YES
+# (jh,ja) -> (jh,ja) + (ih,ja)  YES
+
+# h: susceptible home, i: contagious home, j: infection location
+clado_idx = 1
+
+for (h in 1:num_loc) {
+    for (i in 1:num_loc) {
+        for (j in 1:num_loc) {
+            s_old = joint_loc_inv[i][j] - 1
+            s_new = joint_loc_inv[h][j] - 1
+            lambda_P[h][j] := lambda[j] * P[h][j]
+            if (s_old != s_new) {
+                # divide by 2 for left-right
+                clado_rates[clado_idx] := lambda_P[h][j] / 2.0
+                clado_events[clado_idx++] = [ s_old, s_old, s_new ]
+                clado_rates[clado_idx] := lambda_P[h][j] / 2.0
+                clado_events[clado_idx++] = [ s_old, s_new, s_old ]
+            } else {
+                clado_rates[clado_idx] := lambda_P[h][j]
+                clado_events[clado_idx++] = [ s_old, s_old, s_old ]
+            }
+        }
+    }
+}
+
+
+if (print_debug) {
+    print("Compound state encoding")
+    for (i in home_loc) {
+        for (j in away_loc) {
+            print("home = " + i + " away = " + j + " -> joint = " + joint_loc_inv[i][j])
+        }
+    }
+    print("Recovery rate: " + recovery_rate)
+    print("Subsampling proportion: " + subsampling_p)
+    print("Process age: " + age)
+    
+    print("Visit return rates")
+    if (vd_model == 1) print("M1: all-equal: all depart rates equal")
+    if (vd_model == 2) print("M2: row-equal: all depart rates from home-location i are equal")
+    if (vd_model == 3) print("M3: col-equal: all depart rates into away-location j are equal")
+    if (vd_model == 4) print("M4: none-equal: all depart rates differ")
+    for (i in 1:num_loc) {
+    	print(vr_rate[i])
+    }
+
+    print("Visit depart rates")
+    if (vr_model == 1) print("M1: all-equal: all return rates equal")
+    if (vr_model == 2) print("M2: row-equal: all return rates from home-location i are equal")
+    if (vr_model == 3) print("M3: col-equal: all return rates into away-location j are equal")
+    if (vr_model == 4) print("M4: none-equal: all return rates differ")
+    for (i in 1:num_loc) {
+    	print(vd_rate[i])
+    }
+
+    print("Stationary P matrix")
+    for (i in 1:num_loc) {
+    	print(P[i])
+    }
+    
+    print ("Cladogenetic rates")
+    for (i in 1:clado_events.size()) { 
+        print(i + ":  " + clado_events[i] + "    rate = " + clado_rates[i])
+    }
+
+    print("Anagenetic rates")
+    for (i in 1:eta.size()) {
+        print(eta[i])
+    }
+
+    print("num_taxa = ", num_taxa)
+    print("age = ", age)
+}
+
+clado_map := fnCladogeneticSpeciationRateMatrix(clado_events, clado_rates, num_states)
+omega := clado_map.getCladogeneticProbabilityMatrix()
+sum_rates := clado_map.getSpeciationRateSumPerState()
+
+# root state frequencies
+# pi_{h,j} = S_h * P_{h,j}
+for (i in 1:num_states) {
+    h = joint_loc[i][1]
+    j = joint_loc[i][2]
+    root_freq_u[i] := abs(S_0[h] * P[h][j])
+}
+root_freq := simplex(root_freq_u)
+
+# condition for diversification model
+# condition <- "treeExtant"
+condition <- "survival"
+
+# tensorphylo bug when using originAge
+psi ~ dnGeneralizedLineageHeterogeneousBirthDeathProcess(
+        originAge    = age,
+        pi           = root_freq,
+        lambda       = lambda,
+        eta          = eta,
+        mu           = gamma,
+        omega        = omega,
+        delta        = subsample_delta,
+        rho          = rho,
+        condition    = condition,
+        taxa         = taxa,
+        nStates      = num_states,
+        zeroIndex    = TRUE,
+        nProc        = 10
+)
+
+## Initialize parameters
+if (fix_delta) {
+    delta_param.setValue(delta_true)
+}
+if (fix_R0) {
+    R_0_param.setValue(R0_true)
+}
+if (fix_vd) {
+    vd_base_rate.setValue(vd_true)
+}
+if (fix_vr) {
+    vr_base_rate.setValue(vr_true)
+}
+
+
+print("no clamp", psi.lnProbability())
+psi.clamp(tree)
+print("after clamp tree", psi.lnProbability())
+psi.clampCharData(data)
+print("after clamp data", psi.lnProbability())
+
+
+
+## Define moves
+moves = VectorMoves()
+
+if (!fix_R0) {
+    moves.append(mvScale(R_0_param, weight = mv_weight, tune=true))
+}
+if (!fix_delta) {
+    moves.append(mvScale(delta_param, weight = mv_weight, tune=true))
+}
+
+# gamma, recovery rate
+if (update_recovery_rate) {
+    moves.append(mvSlide(gamma_param, weight=mv_weight, tune=true))
+}
+
+# vr, visit-return rate
+if (!fix_vr) {
+    if (vr_model == 1) {
+        moves.append(mvScale(vr_base_rate, weight=mv_weight, tune=true))
+    } else if (vr_model == 2 || vr_model == 3) {
+        for (i in 1:num_loc) {
+            moves.append(mvScale(vr_base_rate[i], weight=mv_weight, tune=true))
+        }
+    } else if (vr_model == 4) {
+        for (i in 1:num_loc) {
+            for (j in 1:num_loc) {
+                moves.append(mvScale(vr_base_rate[i][j], weight=mv_weight, tune=true))
+            }
+        }
+    }
+}
+
+# vd, visit-depart rate
+if (!fix_vd) {
+    if (vd_model == 1) {
+        moves.append(mvScale(vd_base_rate, weight=mv_weight, tune=true))
+    } else if (vd_model == 2 || vd_model == 3) {
+        for (i in 1:num_loc) {
+            moves.append(mvScale(vd_base_rate[i], weight=mv_weight, tune=true))
+        }
+    } else if (vd_model == 4) {
+        for (i in 1:num_loc) {
+            for (j in 1:num_loc) {
+                moves.append(mvScale(vd_base_rate[i][j], weight=mv_weight, tune=true))
+            }
+        }
+    }
+}
+
+if (false) {
+    # MJL 240318: causes segfault??
+    # delta, R0 joint move
+    moves.append(mvUpDownSlide(weight=mv_weight, tune=true))
+    deltaR0_joint_updown_idx = moves.size()
+    moves[deltaR0_joint_updown_idx].addVariable(delta_param, true)
+    moves[deltaR0_joint_updown_idx].addVariable(R_0_param, false)
+}
+
+## Define monitors
+monitors = VectorMonitors()
+monitors.append(mnScreen(printgen=print_gen))
+monitors.append(mnModel(printgen=print_gen * thin, filename=out_fn + ".model.log"))
+monitors.append(mnFile(R_0, delta, vr_rate, vd_rate, P, printgen=print_gen * thin, filename=out_fn + ".model.json", format="json"))
+#monitors.append(mnJointConditionalAncestralState(tree, psi, filename = out_fn + ".ancStates", 
+#        type = "Standard", printgen = 20 * thin, withStartStates = true)) 
+
+## Define model
+my_model = model(psi)
+
+# analysis
+my_mcmc = mcmc(my_model, monitors, moves, moveschedule=move_schedule)
+#if (f_burn > 0) {
+#    my_mcmc.burnin(num_gen * f_burn, 100)
+#}
+my_mcmc.run(num_gen)
+
+print("run time (min): " + (time("seconds") - start_time)/60)
+q()
+
+

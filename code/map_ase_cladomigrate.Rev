@@ -1,0 +1,24 @@
+data_dir   = "data/" + "emp" + "/"
+#out_dir    = "output/logs/full/clado_migration/"
+out_dir    = "output/logs/full/clado_migration_equal_rates_new_priors/"
+
+phy_fn     = data_dir + "nadeau_full.location_tree.tre"
+
+num_states = 5
+
+## Read input
+tree    = readTrees(phy_fn)[1]
+
+# get correct state trace file
+in_ase_fn  = "out._fullclado.seed_5.ancStates" 
+out_ase_fn = in_ase_fn + ".tre"
+    
+# read state trace
+anc_states = readAncestralStateTrace(out_dir + in_ase_fn)
+
+# generate and write ancestral state tree
+anc_tree = ancestralStateTree(tree=tree, ancestral_state_trace_vector=anc_states, include_start_states=true, file=out_dir + out_ase_fn, burnin=0.25, summary_statistic="MAP", site=1, nStates=3) # num_states[i])
+
+
+# done!
+q()

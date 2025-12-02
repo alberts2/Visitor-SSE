@@ -1,0 +1,328 @@
+# Phylogenetic cladomigration-SIR/SSE model
+
+start_time = time("seconds")
+
+if (!exists("update_recovery_rate")) update_recovery_rate = false
+if (!exists("seed")) seed = 5
+if (!exists("job_dir")) job_dir = "emp"
+
+if (!exists("fix_R0"))        fix_R0       = false
+if (!exists("fix_clado"))     fix_clado    = false
+if (!exists("fix_delta"))     fix_delta    = false
+if (!exists("fix_ma"))        fix_ma       = false
+
+
+
+#tensorphylo_fp = "/mnt/c/Users/ammon_work/Desktop/phylogenetics_software/tensorphylo/build/installer/lib"
+#tensorphylo_fp = "/home/athompson/software/tensorphylo/build/installer/lib"
+# tensorphylo_fp = "/Users/mlandis/.local/lib/tensorphylo"
+#tensorphylo_fp = "/home/mlandis/.local/lib/tensorphylo"
+#tensorphylo_fp = "/Users/albertsoewongsono/Software/tensorphylo/build/installer/lib"
+
+#loadPlugin("TensorPhylo", tensorphylo_fp)
+#loadPlugin("TensorPhylo", "/tensorphylo/build/installer/lib")
+loadPlugin("TensorPhylo", "/software/tensorphylo/build/installer/lib")
+
+## Analysis settings
+print_debug = false
+num_gen = 7500
+mv_weight = 5
+print_gen = 1
+anc_thin = 50
+f_burn = 0.1
+thin = 10
+symmetric=true
+move_schedule = v("random","single")[1]
+
+## Model settings
+ma_model = 4
+
+
+## Filesystem
+data_dir = "data/" + job_dir + "/"
+out_dir  = "output/logs_migration_unequal_fixed_sampling/full/"
+phy_fn   = data_dir + "nadeau_full.location_tree.tre"
+data_fn  = data_dir + "full.dat.unambig.nex"
+out_fn   = out_dir + "out._" + "fullclado" + ".seed_" + seed
+
+## Read input
+print(phy_fn)
+tree    = readTrees(phy_fn)[1]
+taxa    = tree.taxa()
+num_taxa = taxa.size()
+data    = readDiscreteCharacterData(data_fn)
+
+# build compound state space
+num_states = data.getStateDescriptions().size()
+num_loc = num_states
+
+## Set parameters
+
+####################
+# MODEL PARAMETERS #
+####################
+
+age <- tree.rootAge() + tree.branchLength(tree.nnodes())
+
+# host population sizes
+# NOTE: example numbers
+S_0[1] = 57000000							# 1: Hubei 
+S_0[2] = 68000000							# 2: France 
+S_0[3] = 85000000							# 3: Germany 
+S_0[4] = 60000000							# 4: Italy
+#S_0[5] = 745000000 - (S_0[2]+S_0[3]+S_0[4])     # 5: Other European nations
+S_0[5] = 245290000     # 5: Other European nations (changed to match the real data for those 16 non-focal countries)
+
+# gamma, recovery rate
+# expected waiting time to recover, 10 days
+gamma <- rep(1.0/10, num_loc)
+
+# delta, sampling proportion (from Nadeau et al.)
+delta_prop[1] <- 0.15     # 1: Hubei
+delta_prop[2] <- 0.093  # 2: France
+delta_prop[3] <- 0.10   # 3: Germany
+delta_prop[4] <- 0.005   # 4: Italy
+delta_prop[5] <- 0.057  # 5: Other European
+
+# assign sampling rate for current location j (above) to home-curr location i (below)
+for (i in 1:num_loc) {
+    delta[i] := delta_prop[i]*gamma[i]/abs(1.0 - delta_prop[i])
+}
+
+# R0, reproductive number 
+for (i in 1:num_loc) {
+    R_0_param[i] ~ dnLognormal(0.8, 0.5^0.5)
+}
+
+for (i in 1:num_loc) {
+    R_0[i] := R_0_param[i]
+}
+
+clado_prob ~ dnUniform(0,1)
+for (i in 1:num_loc) {
+    for (j in 1:num_loc) {
+        if (i == j) {
+            lambda[i][j] := (delta[i] + gamma[i]) * abs(R_0[i] * abs(1.0 - clado_prob))
+        } else {
+            lambda[i][j] := (delta[j] + gamma[j]) * abs(R_0[i] * clado_prob / (num_loc - 1))
+        }
+    }
+}
+
+
+# mass sampling event parameters
+rho <- 1e-6 # roughly 1 million cases
+# rho <- 1e-4 # roughly 10000 cases
+# possible source for more precise estimates of prevalence per region: https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data
+# possibly use # deaths divided by death-probability to infer # cases
+
+# Depart model
+# assume matrix D_ij for departing from home-location i into away-location j
+# M1: all-equal: all depart rates equal
+# M2: row-equal: all depart rates from home-location i are equal
+# M3: col-equal: all depart rates into away-location j are equal
+# M4: none-equal: all depart rates differ
+
+ma_matrix = readDataDelimitedFile("data/depart_rates.csv",TRUE,",",TRUE) #using mean vd_rates from visitor model
+sd_ma = [0.8,0.1,0.1,0.1,0.8] #based on sd_vd from visitor model
+
+#ma_base_dist = dnLognormal(ln(1/100),0.5) # median depart of 100 days, 95%HPD [43,386] days
+
+# none-equal
+for (i in 1:num_loc) {
+    for (j in 1:num_loc) {
+        ma_rate[i][j] <- abs(0)
+        ma_base_rate[i][j] <- abs(0)
+        if (i != j){
+            ma_base_rate[i][j] ~ dnLognormal(mean = ln(ma_matrix[i][j])-0.5*sd_ma[j]^2,sd = sd_ma[j])
+            ma_rate[i][j] := ln(ma_base_rate[i][j])
+        }
+    }
+}
+
+# build visitor movement matrix, M
+# needs no rate corrections
+for (i in 1:num_loc) {
+    for (j in 1:num_loc) {
+        if (i == j) {
+            # zero diagonal
+            M[i][j] <- 0.0
+        } else {
+            # return event
+            M[i][j] := exp(ma_rate[i][j])
+        }
+    }
+}
+
+
+eta := fnFreeK(M, rescaled = FALSE)
+
+# cladogenetic matrix
+# lambda_iij : i -> i,j
+# i == j : then no migration
+# i != j : then yes migration
+
+clado_idx = 1
+for (i in 1:num_loc) {
+    for (j in 1:num_loc) {
+        s_old = i - 1
+        s_new = j - 1
+        if (s_old != s_new) {
+            # divide by 2 for left-right
+            clado_rates[clado_idx] := lambda[i][j] / 2.0
+            clado_events[clado_idx++] = [ s_old, s_old, s_new ]
+            clado_rates[clado_idx] := lambda[i][j] / 2.0
+            clado_events[clado_idx++] = [ s_old, s_new, s_old ]
+        } else {
+            clado_rates[clado_idx] := lambda[i][j]
+            clado_events[clado_idx++] = [ s_old, s_old, s_old ]
+        }
+    }
+}
+
+sum_rate_0 = 0
+for (i in 1:clado_events.size()) {
+    if (clado_events[i][1] == 0) {
+        sum_rate_0 += clado_rates[i]
+    }
+}
+
+# print(clado_rates)
+# print(lambda[1])
+# print( sum(lambda[1]) )
+# print(sum_rate_0)
+# xxxx
+
+if (print_debug) {
+    print("Recovery rate: " + recovery_rate)
+    print("Subsampling proportion: " + subsampling_p)
+    print("Process age: " + age)
+    
+    print("Migration rates")
+    if (ma_model == 1) print("M1: all-equal: all migration rates equal")
+    if (ma_model == 2) print("M2: row-equal: all migration rates from home-location i are equal")
+    if (ma_model == 3) print("M3: col-equal: all migration rates into away-location j are equal")
+    if (ma_model == 4) print("M4: none-equal: all migration rates differ")
+    #for (i in 1:num_loc) {
+    # 	print(ma_rate[i])
+    #}
+    
+    print ("Cladogenetic rates")
+    for (i in 1:clado_events.size()) { 
+        print(i + ":  " + clado_events[i] + "    rate = " + clado_rates[i])
+    }
+
+    print("Anagenetic rates")
+    for (i in 1:eta.size()) {
+        print(eta[i])
+    }
+
+    print("num_taxa = ", num_taxa)
+    print("age = ", age)
+}
+
+
+clado_map := fnCladogeneticSpeciationRateMatrix(clado_events, clado_rates, num_loc)
+omega := clado_map.getCladogeneticProbabilityMatrix()
+sum_rates := clado_map.getSpeciationRateSumPerState()
+
+# root state frequencies
+for (i in 1:num_loc) {
+    root_freq_u[i] := abs(S_0[i])
+}
+root_freq := simplex(root_freq_u)
+
+# condition for diversification model
+condition <- "survival"
+
+# tensorphylo bug when using originAge
+psi ~ dnGeneralizedLineageHeterogeneousBirthDeathProcess(
+        originAge    = age,
+        pi           = root_freq,
+        lambda       = sum_rates,
+        eta          = eta,
+        mu           = gamma,
+        omega        = omega,
+        delta        = delta,
+        rho          = rho,
+        condition    = condition,
+        taxa         = taxa,
+        nStates      = num_loc,
+        zeroIndex    = TRUE,
+        nProc        = 10
+)
+
+
+print("no clamp", psi.lnProbability())
+psi.clamp(tree)
+print("after clamp tree", psi.lnProbability())
+psi.clampCharData(data)
+print("after clamp data", psi.lnProbability())
+
+## Define moves
+moves = VectorMoves()
+
+if (!fix_R0) {
+    for (i in 1:num_loc) {
+		moves.append(mvScale(R_0_param[i], weight = mv_weight, tune=true))
+	}
+}
+
+if (!fix_clado){
+    moves.append(mvScale(clado_prob, weight = mv_weight, tune=true))
+}
+#if (!fix_delta) {
+#    for (i in 1:num_loc) {
+#		moves.append(mvScale(delta_prop[i], weight = mv_weight, tune=true))
+#	}
+#}
+
+# gamma, recovery rate
+if (update_recovery_rate) {
+    moves.append(mvSlide(gamma_param, weight=mv_weight, tune=true))
+}
+
+# migration rate 
+if (!fix_ma) {
+    if (ma_model == 1) {
+        moves.append(mvScale(ma_base_rate, weight=mv_weight, tune=true))
+    } else if (ma_model == 2 || ma_model == 3) {
+        for (i in 1:num_loc) {
+            moves.append(mvScale(ma_base_rate[i], weight=mv_weight, tune=true))
+        }
+    } else if (ma_model == 4) {
+        for (i in 1:num_loc) {
+            for (j in 1:num_loc) {
+                if (i != j){
+                    moves.append(mvScale(ma_base_rate[i][j], weight=mv_weight, tune=true))
+                }
+            }
+        }
+    }
+}
+
+## Define monitors
+monitors = VectorMonitors()
+monitors.append(mnScreen(printgen=print_gen))
+monitors.append(mnModel(printgen=print_gen * thin, filename=out_fn + ".model.log"))
+monitors.append(mnFile(R_0,clado_prob, delta, ma_rate, printgen=print_gen * thin, filename=out_fn + ".model.json", format="json"))
+
+# this is for ancestral state reconstruction
+monitors.append(mnJointConditionalAncestralState(tree, psi, filename = out_fn + ".ancStates", 
+        type = "Standard", printgen = print_gen * thin, withStartStates = true)) 
+
+# this is for stochastic character map
+monitors.append(mnStochasticCharacterMap(glhbdsp=psi, printgen=print_gen * thin, filename= out_fn + ".stoch.txt", use_simmap_default=false) )
+
+## Define model
+my_model = model(psi)
+
+# analysis
+my_mcmc = mcmc(my_model, monitors, moves, moveschedule=move_schedule)
+#if (f_burn > 0) {
+#    my_mcmc.burnin(num_gen * f_burn, 100)
+#}
+my_mcmc.run(num_gen)
+
+print("run time (min): " + (time("seconds") - start_time)/60)
+q()

@@ -1,0 +1,13 @@
+#nexus
+begin data;
+dimensions ntax=6 nchar=1;
+format missing=? gap=- datatype=standard symbols="0123456789ABCDEFGHIJKLMNO";
+matrix
+1 (1 6 B G L)
+2 (1 6 B G L)
+3 (1 6 B G L)
+4 (1 6 B G L)
+5 (1 6 B G L)
+6 (1 6 B G L)
+;
+end;

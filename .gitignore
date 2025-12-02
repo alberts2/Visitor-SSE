@@ -1,0 +1,10 @@
+*.json
+*.nex.tre
+.DS_Store
+output/logs/3_locations
+output/logs/4_locations/
+output/logs/5_locations/
+output/logs/OLD/
+test.Rev
+test2.Rev
+scripts/plot/confused_needtodiscuss.R

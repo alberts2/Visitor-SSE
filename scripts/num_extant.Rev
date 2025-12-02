@@ -1,0 +1,9 @@
+sim_idx = 99
+
+phy_fn="sim." + sim_idx + ".tre"
+
+tree    = readTrees(phy_fn)[1] # type: ignore
+
+print(tree.ntips() - tree.getFossils().size())
+
+quit()
