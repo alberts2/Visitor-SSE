@@ -8,20 +8,20 @@ In this repository, you can find all the scripts used to do simulations, inferen
 
 ## Approximation vs. full model 
 
-In [approx_validation](https://github.com/mlandis/visitor_sse/tree/main/approx_validation) directory, you will find the simulation scripts and a plotting script used to compare results under the full Visitor SIR model and its approximation. 
+In [approx_validation](https://github.com/alberts2/Visitor-SSE/tree/main/approx_validation) directory, you will find the simulation scripts and a plotting script used to compare results under the full Visitor SIR model and its approximation. 
 
 ## Simulation 
 
-In [scripts](https://github.com/mlandis/visitor_sse/tree/main/scripts) directory, you will find scripts to simulate under the approximation model for generating dataset used for the coverage experiment. Also, in [plot](https://github.com/mlandis/visitor_sse/tree/main/scripts/plot) sub-directory, you will find R scripts used to visualize the results used in the manuscript (see [final_plot](https://github.com/mlandis/visitor_sse/tree/main/scripts/plot/final_plot)). 
+In [scripts](https://github.com/alberts2/Visitor-SSE/tree/main/scripts) directory, you will find scripts to simulate under the approximation model for generating dataset used for the coverage experiment. Also, in [plot](https://github.com/alberts2/Visitor-SSE/tree/main/scripts/plot) sub-directory, you will find R scripts used to visualize the results used in the manuscript (see [final_plot](https://github.com/alberts2/Visitor-SSE/tree/main/scripts/plot/final_plot)). 
 
 ## RevBayes analysis 
 
-In [code](https://github.com/mlandis/visitor_sse/tree/main/code) directory, you will find the RevBayes scripts used to run inference analysis under the approximation model and both migration models using simulated and empirical data. 
+In [code](https://github.com/alberts2/Visitor-SSE/tree/main/code) directory, you will find the RevBayes scripts used to run inference analysis under the approximation model and both migration models using simulated and empirical data. 
 
 ## Tree data
 
-In [data](https://github.com/mlandis/visitor_sse/tree/main/data) directory, you will find the simulated dataset under different setups for coverage experiments on the manuscript as well as [empirical](https://github.com/mlandis/visitor_sse/tree/main/data/emp) data, which contain empirical transmission history from this [publication](https://www.pnas.org/doi/abs/10.1073/pnas.2012008118). 
+In [data](https://github.com/alberts2/Visitor-SSE/tree/main/data) directory, you will find the simulated dataset under different setups for coverage experiments on the manuscript as well as [empirical](https://github.com/alberts2/Visitor-SSE/tree/main/data/emp) data, which contain empirical transmission history from this [publication](https://www.pnas.org/doi/abs/10.1073/pnas.2012008118). 
 
 ## Travel data
 
-Also in [data](https://github.com/mlandis/visitor_sse/tree/main/data) directory, you will find [depart_rates.csv](https://github.com/mlandis/visitor_sse/blob/main/data/depart_rates.csv) file, which contains empirical estimate of per-capita depart rate between these locations used in our study: Hubei, France, Germany, Italy, and other European countries. The [return_rates.csv](https://github.com/mlandis/visitor_sse/blob/main/data/return_rates.csv) contains empirical estimate of per-capita return rate from an away location to a home country from the country list. The raw data are obtained from [eurostat](https://ec.europa.eu/eurostat/web/tourism/database). 
+Also in [data](https://github.com/alberts2/Visitor-SSE/tree/main/data) directory, you will find [depart_rates.csv](https://github.com/alberts2/Visitor-SSE/blob/main/data/depart_rates.csv) file, which contains empirical estimate of per-capita depart rate between these locations used in our study: Hubei, France, Germany, Italy, and other European countries. The [return_rates.csv](https://github.com/alberts2/Visitor-SSE/blob/main/data/return_rates.csv) contains empirical estimate of per-capita return rate from an away location to a home country from the country list. The raw data are obtained from [eurostat](https://ec.europa.eu/eurostat/web/tourism/database). 
